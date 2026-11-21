@@ -1,13 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { cursorPosition, getCurrentWindow } from "@tauri-apps/api/window";
 import { register } from "@tauri-apps/plugin-global-shortcut";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { parseGuide, type Guide } from "./guide";
 import { Navigator } from "./navigator";
 import { renderOverlay, type GameStatus } from "./overlay";
-import { singleFlight, stepOpacity } from "./util";
+import { isCursorOver, singleFlight, stepOpacity } from "./util";
 
 type Settings = { log_path: string; guide_path: string | null; opacity: number | null };
 type LogStatus = { ok: boolean; message: string };
@@ -24,6 +24,29 @@ let moving = false;
 const game: GameStatus = { connected: false, error: "等待讀取日誌…" };
 let lastArea: AreaInfo | undefined;
 let showHelp = false;
+let tooltip = false;
+let hidden = false;
+let winPos = { x: 0, y: 0 };
+let scale = 1;
+
+async function refreshGeometry() {
+  const w = getCurrentWindow();
+  const p = await w.outerPosition();
+  winPos = { x: p.x, y: p.y };
+  scale = await w.scaleFactor();
+}
+
+/** The window is click-through and gets no mouse events, so hover is detected by polling the cursor. */
+async function pollHover() {
+  const icon = root.querySelector(".help-icon");
+  if (hidden || !icon) return;
+  const c = await cursorPosition();
+  const over = isCursorOver({ x: c.x, y: c.y }, winPos, icon.getBoundingClientRect(), scale);
+  if (over !== tooltip) {
+    tooltip = over;
+    draw();
+  }
+}
 let hint = "";
 let hintTimer: number | undefined;
 
@@ -43,14 +66,14 @@ function draw() {
   const message = Object.values(msgs).filter(Boolean).join("\n") || undefined;
   if (!guide || !nav) {
     renderOverlay(root, { title: "", act: "-", step: 0, total: 0, current: "按 Ctrl+Alt+O 選擇攻略 JSON\nCtrl+Alt+K 查看所有快捷鍵", message, status: game,
-      help: showHelp, hint: hint || undefined });
+      help: showHelp, tooltip, hint: hint || undefined });
     return;
   }
   const s = nav.current;
   renderOverlay(root, {
     title: guide.title, act: s.act, step: nav.index + 1, total: guide.steps.length,
     current: s.text, tips: s.tips, next: nav.upcoming?.text, message, status: game,
-    help: showHelp, hint: hint || undefined,
+    help: showHelp, tooltip, hint: hint || undefined,
   });
 }
 
@@ -124,7 +147,8 @@ async function changeOpacity(dir: 1 | -1) {
 
 async function toggle() {
   const w = getCurrentWindow();
-  (await w.isVisible()) ? await w.hide() : await w.show();
+  hidden = await w.isVisible();
+  hidden ? await w.hide() : await w.show();
 }
 
 const keys: [string, () => void | Promise<void>][] = [
@@ -199,6 +223,12 @@ async function main() {
     if (s.guide_path) await loadGuide(s.guide_path);
   });
   draw();
+  await step("視窗位置", async () => {
+    await refreshGeometry();
+    await getCurrentWindow().onMoved(() => void refreshGeometry());
+    await getCurrentWindow().onScaleChanged(() => void refreshGeometry());
+  });
+  window.setInterval(() => void pollHover().catch(() => {}), 100);
   void checkUpdate();
 }
 

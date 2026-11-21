@@ -44,6 +44,7 @@ export type OverlayView = {
   message?: string;
   status?: GameStatus;
   help?: boolean;
+  tooltip?: boolean;
   hint?: string;
 };
 
@@ -63,7 +64,12 @@ export function renderOverlay(root: HTMLElement, v: OverlayView): void {
         ...(v.tips ? [el("tips", `TIPS: ${v.tips}`)] : []),
         ...(v.next ? [el("next", `下一步: ${v.next}`)] : []),
       ];
+  const tip = document.createElement("div");
+  tip.className = "tooltip";
+  tip.append(...HELP.map(([k, what]) => el("help-row", `${k}　${what}`)));
   root.replaceChildren(
+    el("help-icon", "?"),
+    ...(v.tooltip ? [tip] : []),
     ...body,
     ...(v.hint ? [el("hint", v.hint)] : []),
     ...(v.message ? [el("message", v.message)] : []),

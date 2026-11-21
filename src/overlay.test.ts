@@ -87,3 +87,19 @@ describe("help and hints", () => {
     expect(root.querySelector(".hint")).toBeNull();
   });
 });
+
+describe("help icon tooltip", () => {
+  it("always renders the ? icon", () => {
+    const root = document.createElement("div");
+    renderOverlay(root, base);
+    expect(root.querySelector(".help-icon")!.textContent).toBe("?");
+    expect(root.querySelector(".tooltip")).toBeNull();
+  });
+  it("tooltip lists shortcuts while keeping the current step", () => {
+    const root = document.createElement("div");
+    renderOverlay(root, { ...base, tooltip: true });
+    const tip = root.querySelector(".tooltip")!.textContent!;
+    for (const [key] of HELP) expect(tip).toContain(key);
+    expect(root.querySelector(".current")!.textContent).toBe("打隊長");
+  });
+});
