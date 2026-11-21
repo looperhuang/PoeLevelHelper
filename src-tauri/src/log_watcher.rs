@@ -10,10 +10,11 @@ use tauri::{AppHandle, Emitter};
 
 fn zone_regexes() -> &'static [Regex; 2] {
     static RE: OnceLock<[Regex; 2]> = OnceLock::new();
+    // Anchored to the system-message prefix "] : " so chat lines quoting the text don't match.
     RE.get_or_init(|| {
         [
-            Regex::new(r"你已進入：(.+?)。").unwrap(),
-            Regex::new(r"You have entered (.+?)\.").unwrap(),
+            Regex::new(r"\] : (?:<<set:\w+>>)*你已進入：(.+?)。$").unwrap(),
+            Regex::new(r"\] : (?:<<set:\w+>>)*You have entered (.+?)\.$").unwrap(),
         ]
     })
 }
@@ -25,27 +26,43 @@ pub fn parse_zone(line: &str) -> Option<String> {
         .find_map(|re| re.captures(line).map(|c| c[1].to_string()))
 }
 
+const HEAD_LEN: usize = 64;
+
 /// Reads only data appended after `open_at_end`; never scans history (Client.txt can be 100+ MB).
 pub struct Tailer {
     path: PathBuf,
     offset: u64,
     pending: Vec<u8>,
+    /// First bytes of the file; if they change, the file was replaced (rotation).
+    head: Vec<u8>,
+}
+
+fn read_head(f: &mut File) -> io::Result<Vec<u8>> {
+    let mut head = Vec::with_capacity(HEAD_LEN);
+    f.seek(SeekFrom::Start(0))?;
+    f.take(HEAD_LEN as u64).read_to_end(&mut head)?;
+    Ok(head)
 }
 
 impl Tailer {
     pub fn open_at_end(path: &Path) -> io::Result<Tailer> {
-        let offset = File::open(path)?.metadata()?.len();
-        Ok(Tailer { path: path.to_path_buf(), offset, pending: Vec::new() })
+        let mut f = File::open(path)?;
+        let offset = f.metadata()?.len();
+        let head = read_head(&mut f)?;
+        Ok(Tailer { path: path.to_path_buf(), offset, pending: Vec::new(), head })
     }
 
     /// Returns newly appended complete lines; a trailing partial line is kept for the next poll.
     pub fn poll(&mut self) -> io::Result<Vec<String>> {
         let mut f = File::open(&self.path)?;
         let len = f.metadata()?.len();
-        if len < self.offset {
+        let head = read_head(&mut f)?;
+        let replaced = !head.starts_with(&self.head);
+        if len < self.offset || replaced {
             self.offset = 0; // truncated or rotated
             self.pending.clear();
         }
+        self.head = head;
         f.seek(SeekFrom::Start(self.offset))?;
         let mut buf = Vec::new();
         f.read_to_end(&mut buf)?;
@@ -66,39 +83,60 @@ pub struct LogStatus {
     pub message: String,
 }
 
-/// Background thread: emits `zone-entered` (String) and `log-status` (LogStatus).
-/// If the file cannot be opened it reports once and retries every 2 s.
-/// Returns a flag; set it to true to stop the thread (used when the log path changes).
+pub enum WatchEvent {
+    Zone(String),
+    Status(LogStatus),
+}
+
+/// Watch loop. Errors (missing file, read failure) are re-reported every iteration so a
+/// listener that subscribes late still sees them; recovery is reported once. Nothing is
+/// emitted after `stop` is set, so a replaced watcher can't overwrite the new one's status.
+pub fn run_watcher(path: &Path, stop: &AtomicBool, interval: Duration, emit: &mut dyn FnMut(WatchEvent)) {
+    let mut tailer: Option<Tailer> = None;
+    let mut ok = false;
+    while !stop.load(Ordering::Relaxed) {
+        let result = match tailer.as_mut() {
+            Some(t) => t.poll(),
+            None => Tailer::open_at_end(path).map(|t| {
+                tailer = Some(t);
+                Vec::new()
+            }),
+        };
+        if stop.load(Ordering::Relaxed) {
+            return;
+        }
+        match result {
+            Ok(lines) => {
+                if !ok {
+                    ok = true;
+                    emit(WatchEvent::Status(LogStatus { ok: true, message: String::new() }));
+                }
+                for zone in lines.iter().filter_map(|l| parse_zone(l)) {
+                    emit(WatchEvent::Zone(zone));
+                }
+            }
+            Err(e) => {
+                ok = false;
+                let message = format!("讀不到日誌 {}: {e}", path.display());
+                emit(WatchEvent::Status(LogStatus { ok: false, message }));
+            }
+        }
+        std::thread::sleep(interval);
+    }
+}
+
+/// Runs `run_watcher` on a background thread, forwarding events to the frontend
+/// (`zone-entered`: String, `log-status`: LogStatus). Set the returned flag to stop it.
 pub fn spawn_watcher(app: AppHandle, path: PathBuf) -> Arc<AtomicBool> {
     let stop = Arc::new(AtomicBool::new(false));
     let flag = stop.clone();
     std::thread::spawn(move || {
-        let mut tailer = loop {
-            if flag.load(Ordering::Relaxed) {
-                return;
-            }
-            match Tailer::open_at_end(&path) {
-                Ok(t) => {
-                    let _ = app.emit("log-status", LogStatus { ok: true, message: String::new() });
-                    break t;
-                }
-                Err(e) => {
-                    let _ = app.emit(
-                        "log-status",
-                        LogStatus { ok: false, message: format!("找不到日誌 {}: {e}", path.display()) },
-                    );
-                    std::thread::sleep(Duration::from_secs(2));
-                }
-            }
-        };
-        while !flag.load(Ordering::Relaxed) {
-            if let Ok(lines) = tailer.poll() {
-                for zone in lines.iter().filter_map(|l| parse_zone(l)) {
-                    let _ = app.emit("zone-entered", zone);
-                }
-            }
-            std::thread::sleep(Duration::from_millis(500));
-        }
+        run_watcher(&path, &flag, Duration::from_millis(500), &mut |ev| {
+            let _ = match ev {
+                WatchEvent::Zone(z) => app.emit("zone-entered", z),
+                WatchEvent::Status(s) => app.emit("log-status", s),
+            };
+        })
     });
     stop
 }
@@ -154,5 +192,67 @@ mod tests {
         assert_eq!(t.poll().unwrap(), vec!["x"]);
         append(f.path(), "y\n");
         assert_eq!(t.poll().unwrap(), vec!["y"]);
+    }
+
+    #[test]
+    fn ignores_chat_messages_that_quote_zone_text() {
+        let a = "2023/11/09 00:24:09 1 cffb0716 [INFO Client 12140] #某人: 你已進入：獅眼守望。";
+        let b = "2023/11/09 00:24:09 1 cffb0716 [INFO Client 12140] @來自 someone: You have entered Lioneye's Watch.";
+        assert_eq!(parse_zone(a), None);
+        assert_eq!(parse_zone(b), None);
+    }
+
+    #[test]
+    fn detects_rotation_even_when_new_file_is_larger() {
+        let f = tempfile::NamedTempFile::new().unwrap();
+        append(f.path(), "2023 old\n");
+        let mut t = Tailer::open_at_end(f.path()).unwrap();
+        std::fs::write(f.path(), "2026 new first line that is longer\nsecond\n").unwrap();
+        assert_eq!(t.poll().unwrap(), vec!["2026 new first line that is longer", "second"]);
+    }
+
+    fn run_bg(path: PathBuf) -> (Arc<AtomicBool>, Arc<std::sync::Mutex<Vec<String>>>, std::thread::JoinHandle<()>) {
+        let stop = Arc::new(AtomicBool::new(false));
+        let ev = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let (s, e) = (stop.clone(), ev.clone());
+        let h = std::thread::spawn(move || {
+            run_watcher(&path, &s, Duration::from_millis(10), &mut |x| {
+                e.lock().unwrap().push(match x {
+                    WatchEvent::Zone(z) => format!("zone:{z}"),
+                    WatchEvent::Status(st) => format!("ok:{}", st.ok),
+                })
+            })
+        });
+        (stop, ev, h)
+    }
+
+    #[test]
+    fn stopped_watcher_emits_nothing() {
+        let stop = AtomicBool::new(true);
+        let mut n = 0;
+        run_watcher(Path::new("Z:/missing/Client.txt"), &stop, Duration::from_millis(1), &mut |_| n += 1);
+        assert_eq!(n, 0);
+    }
+
+    #[test]
+    fn reports_missing_file_recovery_and_later_read_errors() {
+        let d = tempfile::tempdir().unwrap();
+        let p = d.path().join("Client.txt");
+        let (stop, ev, h) = run_bg(p.clone());
+        std::thread::sleep(Duration::from_millis(80));
+        std::fs::write(&p, "start\n").unwrap();
+        std::thread::sleep(Duration::from_millis(80));
+        append(&p, "x [INFO Client 1] : 你已進入：獅眼守望。\n");
+        std::thread::sleep(Duration::from_millis(80));
+        std::fs::remove_file(&p).unwrap();
+        std::thread::sleep(Duration::from_millis(80));
+        stop.store(true, Ordering::Relaxed);
+        h.join().unwrap();
+        let ev = ev.lock().unwrap().clone();
+        let first_ok = ev.iter().position(|x| x == "ok:true").expect("ok after file appears");
+        assert_eq!(ev[0], "ok:false", "missing file reported first");
+        let zone = ev.iter().position(|x| x == "zone:獅眼守望").expect("zone emitted");
+        assert!(zone > first_ok);
+        assert!(ev[zone..].iter().any(|x| x == "ok:false"), "read error after deletion reported");
     }
 }
