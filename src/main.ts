@@ -4,7 +4,7 @@ import { cursorPosition, getCurrentWindow } from "@tauri-apps/api/window";
 import { register } from "@tauri-apps/plugin-global-shortcut";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
-import { parseGuide, type Guide } from "./guide";
+import { parseGuide, stepZones, type Guide } from "./guide";
 import { Navigator } from "./navigator";
 import { renderOverlay, type GameStatus } from "./overlay";
 import { isCursorOver, singleFlight, stepOpacity } from "./util";
@@ -197,13 +197,13 @@ async function main() {
   if (failed.length) msgs.keys = `快捷鍵註冊失敗: ${failed.join(", ")}`;
 
   await step("監聽區域", () => listen<string>("zone-entered", (e) => {
-    nav?.enterZone(e.payload);
+    nav?.enterZone(e.payload, lastArea?.act ?? undefined);
     Object.assign(game, {
       zone: e.payload,
       act: lastArea?.act ?? undefined,
       areaLevel: lastArea?.level,
       time: new Date().toTimeString().slice(0, 5),
-      tagged: guide ? guide.steps.some((s) => s.zone === e.payload) : undefined,
+      tagged: guide ? guide.steps.some((s) => stepZones(s).includes(e.payload)) : undefined,
     });
     lastArea = undefined;
     draw();

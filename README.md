@@ -52,13 +52,14 @@
 ```
 - `title`、`steps`（不可為空）、每步的 `act` 與 `text` 必填，都是字串。
 - `tips`：顯示在步驟下方的提示。
-- `zone`：進入這個區域時自動跳到這一步。名稱必須和日誌中「你已進入：<區域>。」完全一致（英文客戶端則是 `You have entered <區域>.`）。
+- `zone`：進入這個區域時自動跳到這一步。可以是字串，或字串陣列（例如 `["暮光海灘", "炙熱鹽沼"]`，把前往這一步途中經過的地圖都列上）。名稱必須和日誌中「你已進入：<區域>。」完全一致（英文客戶端則是 `You have entered <區域>.`）。
+- 第 6–10 章會重複用到第 1–5 章的地名，比對時會依遊戲回報的章節，只跳到同一章（或下一章）的步驟。
 - 只會往**後**跳：回城或回到較早的區域不會讓進度倒退；要回頭請按 `Ctrl+Alt+←`。
 - 沒標 `zone` 的步驟只能用 `Ctrl+Alt+→` 手動前進。建議每個新地圖的第一步都標上。
 - 用記事本存檔沒問題（會自動處理 BOM），編碼請用 UTF-8。
 
 ### 查區域名稱
-`scripts/zone-names.md` 是作者日誌中出現過的區域名稱。要用你自己的日誌產生（PowerShell）：
+`scripts/campaign-areas.tsv` 是第 1–10 章所有區域的內部編號與繁中名稱（編號第二段是章節，例如 `1_4_2` 是第 4 章）。`scripts/zone-names.md` 是作者日誌中出現過的所有區域名稱。要用你自己的日誌產生（PowerShell）：
 ```powershell
 Select-String -Path "C:\Program Files (x86)\Grinding Gear Games\Path of Exile\logs\Client.txt" -Pattern '你已進入：(.+?)。' -Encoding UTF8 |
   ForEach-Object { $_.Matches[0].Groups[1].Value } | Sort-Object -Unique

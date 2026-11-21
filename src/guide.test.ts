@@ -32,3 +32,13 @@ describe("parseGuide optional fields", () => {
     expect(() => parseGuide('{"title":"t","steps":[{"act":"A1","text":"x","tips":["a"]}]}')).toThrow(/steps\[0\]\.tips/);
   });
 });
+
+describe("parseGuide zone lists", () => {
+  it("accepts an array of zones", () => {
+    const g = parseGuide('{"title":"t","steps":[{"act":"A1","text":"x","zone":["a","b"]}]}');
+    expect(g.steps[0].zone).toEqual(["a", "b"]);
+  });
+  it("rejects arrays with non-strings", () => {
+    expect(() => parseGuide('{"title":"t","steps":[{"act":"A1","text":"x","zone":["a",1]}]}')).toThrow(/steps\[0\]\.zone/);
+  });
+});

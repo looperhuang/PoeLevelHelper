@@ -33,3 +33,34 @@ describe("Navigator", () => {
     expect(n.index).toBe(0);
   });
 });
+
+describe("Navigator zones and acts", () => {
+  const g = (steps: { act: string; zone?: string | string[] }[]): Guide => ({
+    title: "t",
+    steps: steps.map((s, i) => ({ ...s, text: `s${i}` })),
+  });
+
+  it("matches any zone in a step's zone list", () => {
+    const n = new Navigator(g([{ act: "A1" }, { act: "A1", zone: ["x", "y"] }]));
+    expect(n.enterZone("y")).toBe(true);
+    expect(n.index).toBe(1);
+  });
+
+  it("does not jump to a later act that reuses the zone name", () => {
+    const n = new Navigator(g([{ act: "A1", zone: "z" }, { act: "A1" }, { act: "A6", zone: "z" }]));
+    n.next();
+    expect(n.enterZone("z", 1)).toBe(false);
+    expect(n.index).toBe(1);
+    expect(n.enterZone("z", 6)).toBe(true);
+    expect(n.index).toBe(2);
+  });
+
+  it("prefers the current act, and allows the next act's step (revisiting an old zone)", () => {
+    const n = new Navigator(g([{ act: "A8" }, { act: "A9", zone: "bath" }, { act: "A8", zone: "bath" }]));
+    expect(n.enterZone("bath", 8)).toBe(true);
+    expect(n.index).toBe(2); // same act wins over nearer next-act step
+    const m = new Navigator(g([{ act: "A8" }, { act: "A9", zone: "bath" }]));
+    expect(m.enterZone("bath", 8)).toBe(true);
+    expect(m.index).toBe(1);
+  });
+});
