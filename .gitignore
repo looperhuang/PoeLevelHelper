@@ -23,3 +23,7 @@ dist-ssr
 *.sln
 *.sw?
 .superpowers/
+
+# third-party guide content: not redistributed
+guides/static-strike-slayer-3.29.json
+scripts/sheet.csv

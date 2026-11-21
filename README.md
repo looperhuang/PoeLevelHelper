@@ -25,7 +25,12 @@
 { "title": "攻略名稱",
   "steps": [ { "act": "A1", "text": "要做的事", "tips": "可省略", "zone": "可省略：進入此區域時跳到這一步" } ] }
 ```
-`zone` 必須與日誌中「你已進入：<區域>。」的名稱完全一致。區域只會往後跳（回城或回到較早的區域不會讓進度倒退），要回頭請用 `Ctrl+Alt+←`（`scripts/zone-names.md` 列出你日誌出現過的名稱）。內建：`guides/static-strike-slayer-3.29.json`（由 `scripts/csv-to-guide.mjs` 從試算表轉出，區域為人工標註，部分為推測，請核對）。
+`zone` 必須與日誌中「你已進入：<區域>。」的名稱完全一致。區域只會往後跳（回城或回到較早的區域不會讓進度倒退），要回頭請用 `Ctrl+Alt+←`（`scripts/zone-names.md` 列出你日誌出現過的名稱）。攻略內容屬原作者，**本 repo 不附攻略檔**。若要從同格式的 Google 試算表轉換：
+```
+curl -L -o scripts/sheet.csv "https://docs.google.com/spreadsheets/d/<id>/export?format=csv&gid=<gid>"
+node scripts/csv-to-guide.mjs scripts/sheet.csv guides/my-guide.json
+```
+轉出後再依 `scripts/zone-names.md` 手動加上 `zone`。
 
 ## 開發
 ```
@@ -39,4 +44,4 @@ npm run tauri build -- --no-bundle   # 產生 src-tauri/target/release/poe-overl
 
 ## 注意
 - 只讀日誌檔，不讀寫遊戲記憶體。上線前請自行確認 GGG 對第三方工具的政策。
-- 攻略內容屬原作者，公開發布前請先徵得同意。
+- 攻略內容屬原作者，散布前請先徵得同意。
