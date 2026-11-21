@@ -13,6 +13,10 @@
 | `Ctrl+Alt+H` | 顯示／隱藏疊層 |
 | `Ctrl+Alt+O` | 選擇攻略 JSON（記住，下次自動載入） |
 | `Ctrl+Alt+L` | 選擇 `Client.txt` |
+| `Ctrl+Alt+M` | 移動模式：開啟後可用滑鼠拖動疊層，再按一次結束並記住位置 |
+| `Ctrl+Alt+↑` / `Ctrl+Alt+↓` | 調整透明度（0.2–1，會記住） |
+
+部分 Intel 顯示卡驅動把 `Ctrl+Alt+方向鍵` 當成螢幕旋轉熱鍵；若註冊失敗，疊層會顯示訊息，請先在驅動程式設定中停用該熱鍵。
 
 預設日誌路徑：`C:\Program Files (x86)\Grinding Gear Games\Path of Exile\logs\Client.txt`。設定存在 `%APPDATA%\com.poelevelhelper.overlay\settings.json`。
 
@@ -21,7 +25,7 @@
 { "title": "攻略名稱",
   "steps": [ { "act": "A1", "text": "要做的事", "tips": "可省略", "zone": "可省略：進入此區域時跳到這一步" } ] }
 ```
-`zone` 必須與日誌中「你已進入：<區域>。」的名稱完全一致（`scripts/zone-names.md` 列出你日誌出現過的名稱）。內建：`guides/static-strike-slayer-3.29.json`（由 `scripts/csv-to-guide.mjs` 從試算表轉出，區域為人工標註，部分為推測，請核對）。
+`zone` 必須與日誌中「你已進入：<區域>。」的名稱完全一致。區域只會往後跳（回城或回到較早的區域不會讓進度倒退），要回頭請用 `Ctrl+Alt+←`（`scripts/zone-names.md` 列出你日誌出現過的名稱）。內建：`guides/static-strike-slayer-3.29.json`（由 `scripts/csv-to-guide.mjs` 從試算表轉出，區域為人工標註，部分為推測，請核對）。
 
 ## 開發
 ```
@@ -29,6 +33,7 @@ npm install
 npm test                      # vitest
 cargo test --manifest-path src-tauri/Cargo.toml
 npm run tauri dev
+npm run tauri build -- --no-bundle   # 產生 src-tauri/target/release/poe-overlay.exe
 ```
 **編譯注意**：若系統同時有 Visual Studio Insiders，Rust 可能選到缺 `msvcrt.lib` 的版本而連結失敗。請在 VS 2022 Build Tools 的 `vcvars64.bat` 環境下執行 cargo / tauri。
 

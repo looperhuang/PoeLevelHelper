@@ -23,3 +23,12 @@ describe("parseGuide BOM", () => {
     expect(parseGuide(raw).title).toBe("t");
   });
 });
+
+describe("parseGuide optional fields", () => {
+  it("rejects non-string zone", () => {
+    expect(() => parseGuide('{"title":"t","steps":[{"act":"A1","text":"x","zone":5}]}')).toThrow(/steps\[0\]\.zone/);
+  });
+  it("rejects non-string tips", () => {
+    expect(() => parseGuide('{"title":"t","steps":[{"act":"A1","text":"x","tips":["a"]}]}')).toThrow(/steps\[0\]\.tips/);
+  });
+});

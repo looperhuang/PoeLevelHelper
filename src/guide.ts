@@ -14,6 +14,9 @@ export function parseGuide(raw: string): Guide {
     for (const f of ["act", "text"]) {
       if (typeof s?.[f] !== "string") throw new Error(`steps[${i}].${f} 缺少或不是字串`);
     }
+    for (const f of ["tips", "zone"]) {
+      if (s[f] !== undefined && typeof s[f] !== "string") throw new Error(`steps[${i}].${f} 必須是字串`);
+    }
   });
   return data as Guide;
 }
