@@ -229,6 +229,16 @@ async function main() {
     await getCurrentWindow().onScaleChanged(() => void refreshGeometry());
   });
   window.setInterval(() => void pollHover().catch(() => {}), 100);
+  const trayActions: Record<string, () => void | Promise<void>> = {
+    toggle,
+    guide: pickGuide,
+    log: pickLog,
+    move: toggleMove,
+    help: () => { showHelp = !showHelp; draw(); },
+  };
+  await step("系統匣", () => listen<string>("tray", (e) => {
+    Promise.resolve(trayActions[e.payload]?.()).catch((err) => { msgs.init = `${e.payload} 執行失敗: ${err}`; draw(); });
+  }));
   void checkUpdate();
 }
 

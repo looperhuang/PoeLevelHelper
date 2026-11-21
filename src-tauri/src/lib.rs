@@ -131,6 +131,47 @@ fn start_watcher(app: &AppHandle, state: &AppState, log_path: &str) {
     *w = Some(log_watcher::spawn_watcher(app.clone(), PathBuf::from(log_path), state.last_status.clone()));
 }
 
+/// System-tray icon. Menu actions are forwarded to the frontend as a `tray` event
+/// (payload = item id) so they reuse the same code as the hotkeys; "quit" exits here.
+fn build_tray(app: &tauri::App) -> tauri::Result<()> {
+    use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+    use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+    use tauri::Emitter;
+    let item = |id: &str, text: &str| MenuItem::with_id(app, id, text, true, None::<&str>);
+    let menu = Menu::with_items(
+        app,
+        &[
+            &item("toggle", "顯示／隱藏疊層")?,
+            &item("guide", "載入攻略…")?,
+            &item("log", "選擇 Client.txt…")?,
+            &item("move", "移動位置（再選一次結束）")?,
+            &item("help", "快捷鍵說明")?,
+            &PredefinedMenuItem::separator(app)?,
+            &item("quit", "結束")?,
+        ],
+    )?;
+    let mut tray = TrayIconBuilder::with_id("main")
+        .tooltip("PoeLevelHelper")
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, e| match e.id.as_ref() {
+            "quit" => app.exit(0),
+            id => {
+                let _ = app.emit("tray", id);
+            }
+        })
+        .on_tray_icon_event(|tray, e| {
+            if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = e {
+                let _ = tray.app_handle().emit("tray", "toggle");
+            }
+        });
+    if let Some(icon) = app.default_window_icon() {
+        tray = tray.icon(icon.clone());
+    }
+    tray.build(app)?;
+    Ok(())
+}
+
 fn switch_log_path(app: &AppHandle, state: &AppState, path: String) -> Result<(), String> {
     {
         let mut s = state.settings.lock().unwrap();
@@ -199,6 +240,7 @@ pub fn run() {
             });
             start_watcher(app.handle(), &app.state::<AppState>(), &log_path);
             spawn_game_detector(app.handle().clone());
+            build_tray(app)?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
