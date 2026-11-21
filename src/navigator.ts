@@ -9,9 +9,8 @@ export class Navigator {
   next(): void { this.i = Math.min(this.i + 1, this.guide.steps.length - 1); }
   prev(): void { this.i = Math.max(this.i - 1, 0); }
   enterZone(zone: string): boolean {
-    const s = this.guide.steps;
-    let j = s.findIndex((x, k) => k > this.i && x.zone === zone);
-    if (j < 0) j = s.findIndex((x) => x.zone === zone);
+    // forward only: returning to town or an earlier zone must not rewind progress
+    const j = this.guide.steps.findIndex((x, k) => k > this.i && x.zone === zone);
     if (j < 0) return false;
     this.i = j;
     return true;
