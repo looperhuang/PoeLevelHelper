@@ -9,3 +9,5 @@ html, body { margin: 0; background: transparent; color: #fff; font: 14px/1.4 "Mi
 .status { font-size: 11px; color: #ccc; margin-top: 6px; padding-top: 4px; border-top: 1px solid rgba(255,255,255,0.15); }
 .status.ok::first-letter { color: #6d6; }
 .status.err { color: #f77; }
+.help-row { font-size: 13px; }
+.hint { color: #f0c060; font-size: 12px; margin-top: 4px; }

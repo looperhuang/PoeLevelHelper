@@ -23,6 +23,17 @@ let moving = false;
 // starts "not connected" until the watcher reports; area info precedes the zone line in the log
 const game: GameStatus = { connected: false, error: "等待讀取日誌…" };
 let lastArea: AreaInfo | undefined;
+let showHelp = false;
+let hint = "";
+let hintTimer: number | undefined;
+
+/** Brief feedback for a shortcut; `ms = 0` keeps it until replaced. */
+function flash(text: string, ms = 2000) {
+  hint = text;
+  clearTimeout(hintTimer);
+  if (ms) hintTimer = window.setTimeout(() => { hint = ""; draw(); }, ms);
+  draw();
+}
 
 function applyOpacity() {
   root.style.opacity = String(opacity);
@@ -31,13 +42,15 @@ function applyOpacity() {
 function draw() {
   const message = Object.values(msgs).filter(Boolean).join("\n") || undefined;
   if (!guide || !nav) {
-    renderOverlay(root, { title: "", act: "-", step: 0, total: 0, current: "按 Ctrl+Alt+O 選擇攻略 JSON", message, status: game });
+    renderOverlay(root, { title: "", act: "-", step: 0, total: 0, current: "按 Ctrl+Alt+O 選擇攻略 JSON\nCtrl+Alt+K 查看所有快捷鍵", message, status: game,
+      help: showHelp, hint: hint || undefined });
     return;
   }
   const s = nav.current;
   renderOverlay(root, {
     title: guide.title, act: s.act, step: nav.index + 1, total: guide.steps.length,
     current: s.text, tips: s.tips, next: nav.upcoming?.text, message, status: game,
+    help: showHelp, hint: hint || undefined,
   });
 }
 
@@ -47,6 +60,7 @@ async function loadGuide(path: string): Promise<boolean> {
     guide = g;
     nav = new Navigator(g);
     msgs.guide = "";
+    flash(`已載入：${g.title}`);
     return true;
   } catch (e) {
     msgs.guide = `攻略載入失敗: ${e}`; // keep previous guide
@@ -71,7 +85,11 @@ const toggleMove = singleFlight(async () => {
   moving = !moving;
   root.classList.toggle("moving", moving);
   await getCurrentWindow().setIgnoreCursorEvents(!moving);
-  if (!moving) await invoke("save_window_position");
+  if (moving) flash("移動模式：用滑鼠拖動疊層，Ctrl+Alt+M 結束", 0);
+  else {
+    await invoke("save_window_position");
+    flash("已記住位置");
+  }
 });
 
 const installUpdate = singleFlight(async () => {
@@ -100,6 +118,7 @@ async function checkUpdate() {
 async function changeOpacity(dir: 1 | -1) {
   opacity = stepOpacity(opacity, dir);
   applyOpacity();
+  flash(`透明度 ${Math.round(opacity * 100)}%`);
   await invoke("set_opacity", { opacity });
 }
 
@@ -116,6 +135,7 @@ const keys: [string, () => void | Promise<void>][] = [
   ["Control+Alt+L", pickLog],
   ["Control+Alt+M", toggleMove],
   ["Control+Alt+U", installUpdate],
+  ["Control+Alt+K", () => { showHelp = !showHelp; draw(); }],
   ["Control+Alt+Up", () => changeOpacity(1)],
   ["Control+Alt+Down", () => changeOpacity(-1)],
 ];

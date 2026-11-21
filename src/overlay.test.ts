@@ -61,3 +61,29 @@ describe("renderOverlay status line", () => {
     expect(root.querySelector(".status.ok")).not.toBeNull();
   });
 });
+
+import { HELP } from "./overlay";
+
+describe("help and hints", () => {
+  it("help panel lists every shortcut and replaces the step", () => {
+    const root = document.createElement("div");
+    renderOverlay(root, { ...base, help: true });
+    const t = root.textContent!;
+    for (const [key, what] of HELP) {
+      expect(t).toContain(key);
+      expect(t).toContain(what);
+    }
+    expect(t).not.toContain("打隊長");
+  });
+  it("help covers all registered shortcuts", () => {
+    const keys = HELP.map(([k]) => k).join(" ");
+    for (const k of ["→", "←", "H", "O", "L", "M", "↑", "↓", "U", "K"]) expect(keys).toContain(k);
+  });
+  it("shows a hint line when given", () => {
+    const root = document.createElement("div");
+    renderOverlay(root, { ...base, hint: "透明度 70%" });
+    expect(root.querySelector(".hint")!.textContent).toBe("透明度 70%");
+    renderOverlay(root, base);
+    expect(root.querySelector(".hint")).toBeNull();
+  });
+});

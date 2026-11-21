@@ -21,6 +21,18 @@ export function statusText(g: GameStatus): string {
   return `● ${parts.join(" · ")}${g.tagged === false ? "（攻略未標註）" : ""}`;
 }
 
+/** Shortcut help shown by Ctrl+Alt+K; keep in sync with the keys registered in main.ts. */
+export const HELP: [string, string][] = [
+  ["Ctrl+Alt+→ / ←", "下一步 / 上一步"],
+  ["Ctrl+Alt+H", "顯示 / 隱藏疊層"],
+  ["Ctrl+Alt+O", "選擇攻略 JSON"],
+  ["Ctrl+Alt+L", "選擇 Client.txt"],
+  ["Ctrl+Alt+M", "移動模式（拖動位置）"],
+  ["Ctrl+Alt+↑ / ↓", "調整透明度"],
+  ["Ctrl+Alt+U", "安裝新版（有提示時）"],
+  ["Ctrl+Alt+K", "開關此說明"],
+];
+
 export type OverlayView = {
   title: string;
   act: string;
@@ -31,6 +43,8 @@ export type OverlayView = {
   next?: string;
   message?: string;
   status?: GameStatus;
+  help?: boolean;
+  hint?: string;
 };
 
 function el(cls: string, text: string): HTMLElement {
@@ -41,11 +55,17 @@ function el(cls: string, text: string): HTMLElement {
 }
 
 export function renderOverlay(root: HTMLElement, v: OverlayView): void {
+  const body = v.help
+    ? [el("head", "快捷鍵"), ...HELP.map(([k, what]) => el("help-row", `${k}　${what}`))]
+    : [
+        el("head", `${v.act} · 步驟 ${v.step}/${v.total}`),
+        el("current", v.current),
+        ...(v.tips ? [el("tips", `TIPS: ${v.tips}`)] : []),
+        ...(v.next ? [el("next", `下一步: ${v.next}`)] : []),
+      ];
   root.replaceChildren(
-    el("head", `${v.act} · 步驟 ${v.step}/${v.total}`),
-    el("current", v.current),
-    ...(v.tips ? [el("tips", `TIPS: ${v.tips}`)] : []),
-    ...(v.next ? [el("next", `下一步: ${v.next}`)] : []),
+    ...body,
+    ...(v.hint ? [el("hint", v.hint)] : []),
     ...(v.message ? [el("message", v.message)] : []),
     ...(v.status ? [el(`status ${v.status.connected ? "ok" : "err"}`, statusText(v.status))] : []),
   );
