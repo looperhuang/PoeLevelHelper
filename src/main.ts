@@ -2,6 +2,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { register } from "@tauri-apps/plugin-global-shortcut";
+import { check, type Update } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
 import { parseGuide, type Guide } from "./guide";
 import { Navigator } from "./navigator";
 import { renderOverlay } from "./overlay";
@@ -13,7 +15,8 @@ type LogStatus = { ok: boolean; message: string };
 const root = document.getElementById("overlay")!;
 let guide: Guide | undefined;
 let nav: Navigator | undefined;
-const msgs = { guide: "", log: "", keys: "", init: "" };
+const msgs = { guide: "", log: "", keys: "", init: "", update: "" };
+let pendingUpdate: Update | null = null;
 let opacity = 1;
 let moving = false;
 
@@ -67,6 +70,29 @@ const toggleMove = singleFlight(async () => {
   if (!moving) await invoke("save_window_position");
 });
 
+const installUpdate = singleFlight(async () => {
+  if (!pendingUpdate) return;
+  msgs.update = `正在下載更新 v${pendingUpdate.version}…`;
+  draw();
+  try {
+    await pendingUpdate.downloadAndInstall();
+    await relaunch();
+  } catch (e) {
+    msgs.update = `更新失敗: ${e}`;
+    draw();
+  }
+});
+
+async function checkUpdate() {
+  try {
+    pendingUpdate = await check();
+    if (pendingUpdate) msgs.update = `有新版 v${pendingUpdate.version}，按 Ctrl+Alt+U 更新`;
+  } catch {
+    // offline or no published release yet: not worth bothering the player
+  }
+  draw();
+}
+
 async function changeOpacity(dir: 1 | -1) {
   opacity = stepOpacity(opacity, dir);
   applyOpacity();
@@ -85,6 +111,7 @@ const keys: [string, () => void | Promise<void>][] = [
   ["Control+Alt+O", pickGuide],
   ["Control+Alt+L", pickLog],
   ["Control+Alt+M", toggleMove],
+  ["Control+Alt+U", installUpdate],
   ["Control+Alt+Up", () => changeOpacity(1)],
   ["Control+Alt+Down", () => changeOpacity(-1)],
 ];
@@ -124,6 +151,7 @@ async function main() {
     if (s.guide_path) await loadGuide(s.guide_path);
   });
   draw();
+  void checkUpdate();
 }
 
 main();

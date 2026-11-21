@@ -8,7 +8,8 @@
    - 安裝檔沒有程式碼簽章，Windows SmartScreen 可能跳出警告：按「其他資訊」→「仍要執行」。
    - 電腦沒有 WebView2 時安裝程式會自動下載（Windows 10/11 通常已內建）。
 3. 從開始選單啟動 PoeLevelHelper，按 `Ctrl+Alt+O` 載入攻略（見下方「匯入攻略」）。
-4. 解除安裝：Windows「設定 → 應用程式」。
+4. 自動更新：啟動時會檢查新版，有新版時疊層顯示提示，按 `Ctrl+Alt+U` 下載安裝並重新啟動（v0.2.0 起）。
+5. 解除安裝：Windows「設定 → 應用程式」。
 
 ## 需求
 - Windows 10、遊戲用**視窗化或無邊框視窗化**（全螢幕獨占模式看不到疊層）
@@ -21,6 +22,7 @@
 | `Ctrl+Alt+H` | 顯示／隱藏疊層 |
 | `Ctrl+Alt+O` | 選擇攻略 JSON（記住，下次自動載入） |
 | `Ctrl+Alt+L` | 選擇 `Client.txt` |
+| `Ctrl+Alt+U` | 安裝新版（有新版提示時） |
 | `Ctrl+Alt+M` | 移動模式：開啟後可用滑鼠拖動疊層，再按一次結束並記住位置 |
 | `Ctrl+Alt+↑` / `Ctrl+Alt+↓` | 調整透明度（0.2–1，會記住） |
 
@@ -83,12 +85,15 @@ cargo test --manifest-path src-tauri/Cargo.toml
 npm run tauri dev
 npm run tauri build                  # 產生 src-tauri/target/release/bundle/nsis/*-setup.exe
 ```
+`tauri build` 需要更新簽章私鑰：設定環境變數 `TAURI_SIGNING_PRIVATE_KEY`（金鑰檔路徑或內容）與 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`（目前為空字串）。
 **編譯注意**：若系統同時有 Visual Studio Insiders，Rust 可能選到缺 `msvcrt.lib` 的版本而連結失敗。請在 VS 2022 Build Tools 的 `vcvars64.bat` 環境下執行 cargo / tauri。
 
 ## 發布新版本
 1. 同步修改版本號：`package.json`、`src-tauri/Cargo.toml`、`src-tauri/tauri.conf.json`。
 2. 提交後打標籤並推送：`git tag v0.2.0 && git push origin v0.2.0`。
-3. GitHub Actions 會編譯並建立**草稿** Release，到 Releases 頁確認後按 Publish。
+3. GitHub Actions 會編譯並建立**草稿** Release（含自動更新用的 `latest.json` 與 `.sig`），到 Releases 頁確認後按 Publish。發布後已安裝的使用者才會收到更新。
+
+首次設定：repo 的 Settings → Secrets and variables → Actions 新增 `TAURI_SIGNING_PRIVATE_KEY`，值為私鑰檔內容。**私鑰遺失就無法再發更新給既有使用者，請備份。**
 
 ## 注意
 - 只讀日誌檔，不讀寫遊戲記憶體。上線前請自行確認 GGG 對第三方工具的政策。
