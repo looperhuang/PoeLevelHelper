@@ -4,7 +4,7 @@ use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 
@@ -24,6 +24,22 @@ pub fn parse_zone(line: &str) -> Option<String> {
     zone_regexes()
         .iter()
         .find_map(|re| re.captures(line).map(|c| c[1].to_string()))
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct AreaInfo {
+    pub level: u32,
+    pub act: Option<u32>,
+}
+
+/// Parses `Generating level 34 area "1_4_2"`: area level, and the act from ids like `<part>_<act>_...`.
+pub fn parse_area(line: &str) -> Option<AreaInfo> {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    let re = RE.get_or_init(|| Regex::new(r#"Generating level (\d+) area "([^"]+)""#).unwrap());
+    let c = re.captures(line)?;
+    let level = c[1].parse().ok()?;
+    let act = c[2].split('_').nth(1).and_then(|a| a.parse().ok());
+    Some(AreaInfo { level, act })
 }
 
 const HEAD_LEN: usize = 64;
@@ -77,7 +93,7 @@ impl Tailer {
     }
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, Debug)]
 pub struct LogStatus {
     pub ok: bool,
     pub message: String,
@@ -85,6 +101,7 @@ pub struct LogStatus {
 
 pub enum WatchEvent {
     Zone(String),
+    Area(AreaInfo),
     Status(LogStatus),
 }
 
@@ -128,8 +145,12 @@ pub fn run_watcher(path: &Path, stop: &AtomicBool, interval: Duration, emit: &mu
                     hinted = false; // the game is writing to this log after all
                     emit(WatchEvent::Status(LogStatus { ok: true, message: String::new() }));
                 }
-                for zone in lines.iter().filter_map(|l| parse_zone(l)) {
-                    emit(WatchEvent::Zone(zone));
+                for l in &lines {
+                    if let Some(a) = parse_area(l) {
+                        emit(WatchEvent::Area(a));
+                    } else if let Some(z) = parse_zone(l) {
+                        emit(WatchEvent::Zone(z));
+                    }
                 }
             }
             Err(e) => {
@@ -143,15 +164,20 @@ pub fn run_watcher(path: &Path, stop: &AtomicBool, interval: Duration, emit: &mu
 }
 
 /// Runs `run_watcher` on a background thread, forwarding events to the frontend
-/// (`zone-entered`: String, `log-status`: LogStatus). Set the returned flag to stop it.
-pub fn spawn_watcher(app: AppHandle, path: PathBuf) -> Arc<AtomicBool> {
+/// (`zone-entered`: String, `area-info`: AreaInfo, `log-status`: LogStatus). Set the returned flag to stop it.
+/// `last` keeps the latest status so a frontend that subscribes late can still ask for it.
+pub fn spawn_watcher(app: AppHandle, path: PathBuf, last: Arc<Mutex<Option<LogStatus>>>) -> Arc<AtomicBool> {
     let stop = Arc::new(AtomicBool::new(false));
     let flag = stop.clone();
     std::thread::spawn(move || {
         run_watcher(&path, &flag, Duration::from_millis(500), &mut |ev| {
             let _ = match ev {
                 WatchEvent::Zone(z) => app.emit("zone-entered", z),
-                WatchEvent::Status(s) => app.emit("log-status", s),
+                WatchEvent::Area(a) => app.emit("area-info", a),
+                WatchEvent::Status(s) => {
+                    *last.lock().unwrap() = Some(s.clone());
+                    app.emit("log-status", s)
+                }
             };
         })
     });
@@ -237,6 +263,7 @@ mod tests {
                 e.lock().unwrap().push(match x {
                     WatchEvent::Zone(z) => format!("zone:{z}"),
                     WatchEvent::Status(st) => format!("ok:{}", st.ok),
+                    WatchEvent::Area(ar) => format!("area:{}", ar.level),
                 })
             })
         });
@@ -298,5 +325,22 @@ mod tests {
         let msgs = msgs.lock().unwrap().clone();
         assert!(msgs[0].contains("天未更新"), "stale hint first: {msgs:?}");
         assert_eq!(msgs.last().unwrap(), "", "hint cleared after new lines: {msgs:?}");
+    }
+
+    #[test]
+    fn parses_area_level_and_act() {
+        let l = r#"2026/11/21 12:10:22 8433734 1186a803 [DEBUG Client 21184] Generating level 34 area "1_4_2" with seed 2030187915"#;
+        assert_eq!(parse_area(l), Some(AreaInfo { level: 34, act: Some(4) }));
+        let l = r#"x [DEBUG Client 1] Generating level 68 area "2_10_town" with seed 1"#;
+        assert_eq!(parse_area(l), Some(AreaInfo { level: 68, act: Some(10) }));
+    }
+
+    #[test]
+    fn area_without_act_number() {
+        let l = r#"x [DEBUG Client 1] Generating level 60 area "HideoutForest" with seed 1"#;
+        assert_eq!(parse_area(l), Some(AreaInfo { level: 60, act: None }));
+        let l = r#"x [DEBUG Client 1] Generating level 33 area "1_Labyrinth_boss_2_end" with seed 2"#;
+        assert_eq!(parse_area(l), Some(AreaInfo { level: 33, act: None }));
+        assert_eq!(parse_area("x : 你已進入：獅眼守望。"), None);
     }
 }

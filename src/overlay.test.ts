@@ -32,3 +32,32 @@ describe("renderOverlay", () => {
     expect(root.querySelector("img")).toBeNull();
   });
 });
+
+import { statusText } from "./overlay";
+
+describe("statusText", () => {
+  it("shows the error when the log can't be read", () => {
+    expect(statusText({ connected: false, error: "讀不到日誌" })).toBe("○ 讀不到日誌");
+  });
+  it("waits for the first zone", () => {
+    expect(statusText({ connected: true })).toBe("● 已連線，等待進入區域…");
+  });
+  it("shows act, zone, area level and time", () => {
+    expect(statusText({ connected: true, zone: "漆黑礦坑：第 2 層", act: 4, areaLevel: 34, time: "12:10", tagged: true }))
+      .toBe("● 第4章 · 漆黑礦坑：第 2 層 · 區域等級 34 · 12:10");
+  });
+  it("marks zones the guide does not tag and omits unknown parts", () => {
+    expect(statusText({ connected: true, zone: "藏身處 - 富饒之地", areaLevel: 60, time: "12:11", tagged: false }))
+      .toBe("● 藏身處 - 富饒之地 · 區域等級 60 · 12:11（攻略未標註）");
+  });
+});
+
+describe("renderOverlay status line", () => {
+  it("renders status with ok/err class", () => {
+    const root = document.createElement("div");
+    renderOverlay(root, { ...base, status: { connected: false, error: "x" } });
+    expect(root.querySelector(".status.err")!.textContent).toBe("○ x");
+    renderOverlay(root, { ...base, status: { connected: true } });
+    expect(root.querySelector(".status.ok")).not.toBeNull();
+  });
+});

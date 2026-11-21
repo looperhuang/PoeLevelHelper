@@ -6,3 +6,6 @@ html, body { margin: 0; background: transparent; color: #fff; font: 14px/1.4 "Mi
 .next { color: #aaa; font-size: 12px; margin-top: 4px; }
 .message { color: #f77; margin-top: 4px; }
 #overlay.moving { outline: 2px dashed #f0c060; cursor: move; }
+.status { font-size: 11px; color: #ccc; margin-top: 6px; padding-top: 4px; border-top: 1px solid rgba(255,255,255,0.15); }
+.status.ok::first-letter { color: #6d6; }
+.status.err { color: #f77; }

@@ -13,6 +13,12 @@ struct AppState {
     dir: PathBuf,
     settings: Mutex<Settings>,
     watcher: Mutex<Option<Arc<AtomicBool>>>,
+    last_status: Arc<Mutex<Option<log_watcher::LogStatus>>>,
+}
+
+#[tauri::command]
+fn get_log_status(state: State<AppState>) -> Option<log_watcher::LogStatus> {
+    state.last_status.lock().unwrap().clone()
 }
 
 #[tauri::command]
@@ -121,7 +127,8 @@ fn start_watcher(app: &AppHandle, state: &AppState, log_path: &str) {
     if let Some(old) = w.take() {
         old.store(true, Ordering::Relaxed);
     }
-    *w = Some(log_watcher::spawn_watcher(app.clone(), PathBuf::from(log_path)));
+    *state.last_status.lock().unwrap() = None;
+    *w = Some(log_watcher::spawn_watcher(app.clone(), PathBuf::from(log_path), state.last_status.clone()));
 }
 
 fn switch_log_path(app: &AppHandle, state: &AppState, path: String) -> Result<(), String> {
@@ -184,13 +191,19 @@ pub fn run() {
             {
                 let _ = w.set_position(tauri::PhysicalPosition::new(x, y));
             }
-            app.manage(AppState { dir, settings: Mutex::new(settings), watcher: Mutex::new(None) });
+            app.manage(AppState {
+                dir,
+                settings: Mutex::new(settings),
+                watcher: Mutex::new(None),
+                last_status: Arc::new(Mutex::new(None)),
+            });
             start_watcher(app.handle(), &app.state::<AppState>(), &log_path);
             spawn_game_detector(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             get_settings,
+            get_log_status,
             read_text_file,
             pick_guide_file,
             pick_log_file,

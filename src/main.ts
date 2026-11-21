@@ -6,11 +6,12 @@ import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { parseGuide, type Guide } from "./guide";
 import { Navigator } from "./navigator";
-import { renderOverlay } from "./overlay";
+import { renderOverlay, type GameStatus } from "./overlay";
 import { singleFlight, stepOpacity } from "./util";
 
 type Settings = { log_path: string; guide_path: string | null; opacity: number | null };
 type LogStatus = { ok: boolean; message: string };
+type AreaInfo = { level: number; act: number | null };
 
 const root = document.getElementById("overlay")!;
 let guide: Guide | undefined;
@@ -19,6 +20,9 @@ const msgs = { guide: "", log: "", keys: "", init: "", update: "" };
 let pendingUpdate: Update | null = null;
 let opacity = 1;
 let moving = false;
+// starts "not connected" until the watcher reports; area info precedes the zone line in the log
+const game: GameStatus = { connected: false, error: "等待讀取日誌…" };
+let lastArea: AreaInfo | undefined;
 
 function applyOpacity() {
   root.style.opacity = String(opacity);
@@ -27,13 +31,13 @@ function applyOpacity() {
 function draw() {
   const message = Object.values(msgs).filter(Boolean).join("\n") || undefined;
   if (!guide || !nav) {
-    renderOverlay(root, { title: "", act: "-", step: 0, total: 0, current: "按 Ctrl+Alt+O 選擇攻略 JSON", message });
+    renderOverlay(root, { title: "", act: "-", step: 0, total: 0, current: "按 Ctrl+Alt+O 選擇攻略 JSON", message, status: game });
     return;
   }
   const s = nav.current;
   renderOverlay(root, {
     title: guide.title, act: s.act, step: nav.index + 1, total: guide.steps.length,
-    current: s.text, tips: s.tips, next: nav.upcoming?.text, message,
+    current: s.text, tips: s.tips, next: nav.upcoming?.text, message, status: game,
   });
 }
 
@@ -125,6 +129,13 @@ async function step(name: string, fn: () => Promise<unknown>) {
   }
 }
 
+function applyLogStatus(st: LogStatus) {
+  game.connected = st.ok;
+  game.error = st.ok ? undefined : st.message;
+  msgs.log = st.ok ? st.message : ""; // ok + message = stale-log hint
+  draw();
+}
+
 async function main() {
   draw();
   await step("點擊穿透", () => getCurrentWindow().setIgnoreCursorEvents(true));
@@ -141,9 +152,26 @@ async function main() {
   }
   if (failed.length) msgs.keys = `快捷鍵註冊失敗: ${failed.join(", ")}`;
 
-  await step("監聽區域", () => listen<string>("zone-entered", (e) => { if (nav?.enterZone(e.payload)) draw(); }));
+  await step("監聽區域", () => listen<string>("zone-entered", (e) => {
+    nav?.enterZone(e.payload);
+    Object.assign(game, {
+      zone: e.payload,
+      act: lastArea?.act ?? undefined,
+      areaLevel: lastArea?.level,
+      time: new Date().toTimeString().slice(0, 5),
+      tagged: guide ? guide.steps.some((s) => s.zone === e.payload) : undefined,
+    });
+    lastArea = undefined;
+    draw();
+  }));
   await step("監聽日誌狀態", () =>
-    listen<LogStatus>("log-status", (e) => { msgs.log = e.payload.message; draw(); })); // message: error, stale-log hint, or ""
+    listen<LogStatus>("log-status", (e) => applyLogStatus(e.payload)));
+  // the watcher may have reported before we subscribed
+  await step("讀取日誌狀態", async () => {
+    const st = await invoke<LogStatus | null>("get_log_status");
+    if (st) applyLogStatus(st);
+  });
+  await step("監聽區域資訊", () => listen<AreaInfo>("area-info", (e) => { lastArea = e.payload; }));
   await step("讀取設定", async () => {
     const s = await invoke<Settings>("get_settings");
     if (s.opacity != null) opacity = s.opacity;
