@@ -4,7 +4,7 @@ export type Guide = { title: string; steps: Step[] };
 export function parseGuide(raw: string): Guide {
   let data: any;
   try {
-    data = JSON.parse(raw);
+    data = JSON.parse(raw.replace(/^﻿/, "")); // Windows Notepad adds a BOM
   } catch (e) {
     throw new Error(`攻略不是合法 JSON: ${(e as Error).message}`);
   }

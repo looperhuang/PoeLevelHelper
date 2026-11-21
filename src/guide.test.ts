@@ -16,3 +16,10 @@ describe("parseGuide", () => {
     expect(parseGuide(JSON.stringify(raw))).toEqual(raw);
   });
 });
+
+describe("parseGuide BOM", () => {
+  it("accepts a UTF-8 BOM (Windows Notepad)", () => {
+    const raw = "\uFEFF" + JSON.stringify({ title: "t", steps: [{ act: "A1", text: "go" }] });
+    expect(parseGuide(raw).title).toBe("t");
+  });
+});

@@ -25,7 +25,7 @@ const FILE: &str = "settings.json";
 pub fn load(dir: &Path) -> Settings {
     std::fs::read_to_string(dir.join(FILE))
         .ok()
-        .and_then(|t| serde_json::from_str(&t).ok())
+        .and_then(|t| serde_json::from_str(t.trim_start_matches('\u{feff}')).ok())
         .unwrap_or_default()
 }
 
@@ -48,6 +48,15 @@ mod tests {
         let d = tempfile::tempdir().unwrap();
         std::fs::write(d.path().join("settings.json"), "{ not json").unwrap();
         assert_eq!(load(d.path()), Settings::default());
+    }
+
+    #[test]
+    fn load_accepts_utf8_bom() {
+        let d = tempfile::tempdir().unwrap();
+        let s = Settings { log_path: "x".into(), ..Settings::default() };
+        let json = format!("\u{feff}{}", serde_json::to_string(&s).unwrap());
+        std::fs::write(d.path().join("settings.json"), json).unwrap();
+        assert_eq!(load(d.path()), s);
     }
 
     #[test]
