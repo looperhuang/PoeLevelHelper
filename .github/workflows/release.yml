@@ -1,0 +1,36 @@
+# Push a tag like v0.1.0 -> build the Windows installer and create a DRAFT release.
+# Review the draft on GitHub, then publish it.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - run: npm ci
+      - run: npm test
+      - run: cargo test --manifest-path src-tauri/Cargo.toml
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: PoeLevelHelper ${{ github.ref_name }}
+          releaseBody: |
+            Windows 安裝檔：下載 `PoeLevelHelper_*_x64-setup.exe` 執行即可（不需管理員權限）。
+            未簽章，Windows SmartScreen 可能顯示警告：按「其他資訊」→「仍要執行」。
+            攻略檔不隨附，請見 README 的「匯入攻略」。
+          releaseDraft: true
+          prerelease: false

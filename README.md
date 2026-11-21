@@ -2,6 +2,14 @@
 
 透明、置頂、點擊穿透的疊層，顯示 PoE1 練等攻略「現在該做什麼」。讀 `Client.txt` 偵測進入的區域並自動跳步，區域內用快捷鍵手動前進／後退。
 
+## 安裝（一般使用者）
+1. 到 [Releases](https://github.com/looperhuang/PoeLevelHelper/releases) 下載最新的 `PoeLevelHelper_<版本>_x64-setup.exe`。
+2. 執行安裝檔，不需要管理員權限，裝在 `%LOCALAPPDATA%\PoeLevelHelper`。
+   - 安裝檔沒有程式碼簽章，Windows SmartScreen 可能跳出警告：按「其他資訊」→「仍要執行」。
+   - 電腦沒有 WebView2 時安裝程式會自動下載（Windows 10/11 通常已內建）。
+3. 從開始選單啟動 PoeLevelHelper，按 `Ctrl+Alt+O` 載入攻略（見下方「匯入攻略」）。
+4. 解除安裝：Windows「設定 → 應用程式」。
+
 ## 需求
 - Windows 10、遊戲用**視窗化或無邊框視窗化**（全螢幕獨占模式看不到疊層）
 - 開發：Node、Rust（stable）、Visual Studio 2022 Build Tools（C++）、WebView2
@@ -73,9 +81,14 @@ npm install
 npm test                      # vitest
 cargo test --manifest-path src-tauri/Cargo.toml
 npm run tauri dev
-npm run tauri build -- --no-bundle   # 產生 src-tauri/target/release/poe-overlay.exe
+npm run tauri build                  # 產生 src-tauri/target/release/bundle/nsis/*-setup.exe
 ```
 **編譯注意**：若系統同時有 Visual Studio Insiders，Rust 可能選到缺 `msvcrt.lib` 的版本而連結失敗。請在 VS 2022 Build Tools 的 `vcvars64.bat` 環境下執行 cargo / tauri。
+
+## 發布新版本
+1. 同步修改版本號：`package.json`、`src-tauri/Cargo.toml`、`src-tauri/tauri.conf.json`。
+2. 提交後打標籤並推送：`git tag v0.2.0 && git push origin v0.2.0`。
+3. GitHub Actions 會編譯並建立**草稿** Release，到 Releases 頁確認後按 Publish。
 
 ## 注意
 - 只讀日誌檔，不讀寫遊戲記憶體。上線前請自行確認 GGG 對第三方工具的政策。
