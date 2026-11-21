@@ -1,0 +1,18 @@
+import { describe, it, expect } from "vitest";
+import { parseGuide } from "./guide";
+
+describe("parseGuide", () => {
+  it("throws on non-JSON", () => {
+    expect(() => parseGuide("not json")).toThrow();
+  });
+  it("throws on empty steps", () => {
+    expect(() => parseGuide('{"title":"t","steps":[]}')).toThrow(/steps/);
+  });
+  it("names the bad field", () => {
+    expect(() => parseGuide('{"title":"t","steps":[{"act":"A1"}]}')).toThrow(/steps\[0\]\.text/);
+  });
+  it("returns valid guide unchanged", () => {
+    const raw = { title: "t", steps: [{ act: "A1", text: "go", zone: "Z" }] };
+    expect(parseGuide(JSON.stringify(raw))).toEqual(raw);
+  });
+});
