@@ -1,0 +1,7 @@
+html, body { margin: 0; background: transparent; color: #fff; font: 14px/1.4 "Microsoft JhengHei", sans-serif; }
+#overlay { padding: 8px 10px; background: rgba(0, 0, 0, 0.6); border-radius: 6px; text-shadow: 0 0 3px #000; white-space: pre-wrap; }
+.head { color: #f0c060; font-size: 12px; }
+.current { font-size: 16px; font-weight: bold; margin: 4px 0; }
+.tips { color: #9fd; font-size: 13px; }
+.next { color: #aaa; font-size: 12px; margin-top: 4px; }
+.message { color: #f77; margin-top: 4px; }
