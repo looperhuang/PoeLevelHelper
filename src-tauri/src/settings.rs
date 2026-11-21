@@ -11,11 +11,12 @@ pub struct Settings {
     pub guide_path: Option<String>,
     pub window_x: Option<i32>,
     pub window_y: Option<i32>,
+    pub opacity: Option<f64>,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { log_path: DEFAULT_LOG_PATH.to_string(), guide_path: None, window_x: None, window_y: None }
+        Settings { log_path: DEFAULT_LOG_PATH.to_string(), guide_path: None, window_x: None, window_y: None, opacity: None }
     }
 }
 
@@ -62,8 +63,17 @@ mod tests {
     #[test]
     fn save_then_load_round_trips() {
         let d = tempfile::tempdir().unwrap();
-        let s = Settings { log_path: "x".into(), guide_path: Some("g.json".into()), window_x: Some(5), window_y: None };
+        let s = Settings { log_path: "x".into(), guide_path: Some("g.json".into()), window_x: Some(5), window_y: None, opacity: Some(0.5) };
         save(d.path(), &s).unwrap();
         assert_eq!(load(d.path()), s);
+    }
+
+    #[test]
+    fn load_old_file_without_new_fields() {
+        let d = tempfile::tempdir().unwrap();
+        std::fs::write(d.path().join("settings.json"), r#"{"log_path":"x"}"#).unwrap();
+        let s = load(d.path());
+        assert_eq!(s.log_path, "x");
+        assert_eq!(s.opacity, None);
     }
 }
