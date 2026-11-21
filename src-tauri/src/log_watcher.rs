@@ -88,12 +88,24 @@ pub enum WatchEvent {
     Status(LogStatus),
 }
 
+const STALE_DAYS: u64 = 7;
+
+/// A log untouched for a week is probably an old install, not the game being played.
+fn stale_hint(path: &Path) -> Option<String> {
+    let age = std::fs::metadata(path).ok()?.modified().ok()?.elapsed().ok()?;
+    let days = age.as_secs() / 86_400;
+    (days >= STALE_DAYS).then(|| {
+        format!("日誌已 {days} 天未更新，若遊戲裝在別處請按 Ctrl+Alt+L 重新選擇（目前：{}）", path.display())
+    })
+}
+
 /// Watch loop. Errors (missing file, read failure) are re-reported every iteration so a
 /// listener that subscribes late still sees them; recovery is reported once. Nothing is
 /// emitted after `stop` is set, so a replaced watcher can't overwrite the new one's status.
 pub fn run_watcher(path: &Path, stop: &AtomicBool, interval: Duration, emit: &mut dyn FnMut(WatchEvent)) {
     let mut tailer: Option<Tailer> = None;
     let mut ok = false;
+    let mut hinted = false;
     while !stop.load(Ordering::Relaxed) {
         let result = match tailer.as_mut() {
             Some(t) => t.poll(),
@@ -109,6 +121,11 @@ pub fn run_watcher(path: &Path, stop: &AtomicBool, interval: Duration, emit: &mu
             Ok(lines) => {
                 if !ok {
                     ok = true;
+                    let message = stale_hint(path).unwrap_or_default();
+                    hinted = !message.is_empty();
+                    emit(WatchEvent::Status(LogStatus { ok: true, message }));
+                } else if hinted && !lines.is_empty() {
+                    hinted = false; // the game is writing to this log after all
                     emit(WatchEvent::Status(LogStatus { ok: true, message: String::new() }));
                 }
                 for zone in lines.iter().filter_map(|l| parse_zone(l)) {
@@ -254,5 +271,32 @@ mod tests {
         let zone = ev.iter().position(|x| x == "zone:獅眼守望").expect("zone emitted");
         assert!(zone > first_ok);
         assert!(ev[zone..].iter().any(|x| x == "ok:false"), "read error after deletion reported");
+    }
+
+    #[test]
+    fn hints_when_log_is_stale_and_clears_on_new_lines() {
+        let d = tempfile::tempdir().unwrap();
+        let p = d.path().join("Client.txt");
+        std::fs::write(&p, "old\n").unwrap();
+        let old = std::time::SystemTime::now() - Duration::from_secs(8 * 24 * 3600);
+        std::fs::File::options().write(true).open(&p).unwrap().set_modified(old).unwrap();
+        let stop = Arc::new(AtomicBool::new(false));
+        let msgs = Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        let (s, m, path) = (stop.clone(), msgs.clone(), p.clone());
+        let h = std::thread::spawn(move || {
+            run_watcher(&path, &s, Duration::from_millis(10), &mut |x| {
+                if let WatchEvent::Status(st) = x {
+                    m.lock().unwrap().push(st.message);
+                }
+            })
+        });
+        std::thread::sleep(Duration::from_millis(80));
+        append(&p, "new\n");
+        std::thread::sleep(Duration::from_millis(80));
+        stop.store(true, Ordering::Relaxed);
+        h.join().unwrap();
+        let msgs = msgs.lock().unwrap().clone();
+        assert!(msgs[0].contains("天未更新"), "stale hint first: {msgs:?}");
+        assert_eq!(msgs.last().unwrap(), "", "hint cleared after new lines: {msgs:?}");
     }
 }

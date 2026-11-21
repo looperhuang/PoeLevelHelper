@@ -1,5 +1,6 @@
 mod log_watcher;
 mod settings;
+mod game_detect;
 
 use settings::Settings;
 use std::path::PathBuf;
@@ -123,15 +124,48 @@ fn start_watcher(app: &AppHandle, state: &AppState, log_path: &str) {
     *w = Some(log_watcher::spawn_watcher(app.clone(), PathBuf::from(log_path)));
 }
 
-#[tauri::command]
-fn set_log_path(app: AppHandle, state: State<AppState>, path: String) -> Result<(), String> {
+fn switch_log_path(app: &AppHandle, state: &AppState, path: String) -> Result<(), String> {
     {
         let mut s = state.settings.lock().unwrap();
         s.log_path = path.clone();
         settings::save(&state.dir, &s).map_err(|e| e.to_string())?;
     }
-    start_watcher(&app, &state, &path);
+    start_watcher(app, state, &path);
     Ok(())
+}
+
+#[tauri::command]
+fn set_log_path(app: AppHandle, state: State<AppState>, path: String) -> Result<(), String> {
+    switch_log_path(&app, &state, path)
+}
+
+/// Every 5 s: if a Path of Exile client is running from another folder than the configured
+/// log, switch to that client's logs/Client.txt (the running game is the source of truth).
+fn spawn_game_detector(app: AppHandle) {
+    use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
+    std::thread::spawn(move || {
+        let Ok(mut sys) = System::new() else {
+            return; // process listing unavailable: keep the configured path
+        };
+        let kind = ProcessRefreshKind::nothing().with_exe(UpdateKind::OnlyIfNotSet);
+        loop {
+            sys.refresh_processes_specifics(ProcessesToUpdate::All, true, kind);
+            let found = sys
+                .processes()
+                .values()
+                .find_map(|p| game_detect::log_from_exe(&p.name().to_string_lossy(), p.exe()?))
+                .filter(|log| log.exists());
+            if let Some(log) = found {
+                let log = log.to_string_lossy().into_owned();
+                let state = app.state::<AppState>();
+                let current = state.settings.lock().unwrap().log_path.clone();
+                if !current.eq_ignore_ascii_case(&log) {
+                    let _ = switch_log_path(&app, &state, log);
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_secs(5));
+        }
+    });
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -152,6 +186,7 @@ pub fn run() {
             }
             app.manage(AppState { dir, settings: Mutex::new(settings), watcher: Mutex::new(None) });
             start_watcher(app.handle(), &app.state::<AppState>(), &log_path);
+            spawn_game_detector(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

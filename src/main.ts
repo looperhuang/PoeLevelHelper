@@ -143,7 +143,7 @@ async function main() {
 
   await step("監聽區域", () => listen<string>("zone-entered", (e) => { if (nav?.enterZone(e.payload)) draw(); }));
   await step("監聽日誌狀態", () =>
-    listen<LogStatus>("log-status", (e) => { msgs.log = e.payload.ok ? "" : e.payload.message; draw(); }));
+    listen<LogStatus>("log-status", (e) => { msgs.log = e.payload.message; draw(); })); // message: error, stale-log hint, or ""
   await step("讀取設定", async () => {
     const s = await invoke<Settings>("get_settings");
     if (s.opacity != null) opacity = s.opacity;

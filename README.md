@@ -28,7 +28,7 @@
 
 部分 Intel 顯示卡驅動把 `Ctrl+Alt+方向鍵` 當成螢幕旋轉熱鍵；若註冊失敗，疊層會顯示訊息，請先在驅動程式設定中停用該熱鍵。
 
-預設日誌路徑：`C:\Program Files (x86)\Grinding Gear Games\Path of Exile\logs\Client.txt`。設定存在 `%APPDATA%\com.poelevelhelper.overlay\settings.json`。
+**日誌路徑會自動偵測**：遊戲執行中時，疊層會自動改讀該遊戲資料夾的 `logs\Client.txt`（每 5 秒檢查一次）。遊戲沒開時沿用上次的路徑；日誌超過 7 天沒更新會顯示提示。也可用 `Ctrl+Alt+L` 手動選擇，但遊戲執行中會以遊戲實際位置為準。設定存在 `%APPDATA%\com.poelevelhelper.overlay\settings.json`。
 
 ## 匯入攻略
 
