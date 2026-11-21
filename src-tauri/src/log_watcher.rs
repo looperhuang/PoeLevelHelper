@@ -68,9 +68,15 @@ pub struct LogStatus {
 
 /// Background thread: emits `zone-entered` (String) and `log-status` (LogStatus).
 /// If the file cannot be opened it reports once and retries every 2 s.
-pub fn spawn_watcher(app: AppHandle, path: PathBuf) {
+/// Returns a flag; set it to true to stop the thread (used when the log path changes).
+pub fn spawn_watcher(app: AppHandle, path: PathBuf) -> Arc<AtomicBool> {
+    let stop = Arc::new(AtomicBool::new(false));
+    let flag = stop.clone();
     std::thread::spawn(move || {
         let mut tailer = loop {
+            if flag.load(Ordering::Relaxed) {
+                return;
+            }
             match Tailer::open_at_end(&path) {
                 Ok(t) => {
                     let _ = app.emit("log-status", LogStatus { ok: true, message: String::new() });
@@ -85,7 +91,7 @@ pub fn spawn_watcher(app: AppHandle, path: PathBuf) {
                 }
             }
         };
-        loop {
+        while !flag.load(Ordering::Relaxed) {
             if let Ok(lines) = tailer.poll() {
                 for zone in lines.iter().filter_map(|l| parse_zone(l)) {
                     let _ = app.emit("zone-entered", zone);
@@ -94,6 +100,7 @@ pub fn spawn_watcher(app: AppHandle, path: PathBuf) {
             std::thread::sleep(Duration::from_millis(500));
         }
     });
+    stop
 }
 
 #[cfg(test)]
