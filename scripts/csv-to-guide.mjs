@@ -1,4 +1,5 @@
-// One-off: node scripts/csv-to-guide.mjs <in.csv> <out.json>
+// node scripts/csv-to-guide.mjs <in.csv> <out.json> [title]
+// Expects columns C = act (A1..A10, only on the act's first row), D = step text, E = tips.
 import { readFileSync, writeFileSync } from "node:fs";
 
 function parseCsv(t) {
@@ -17,7 +18,12 @@ function parseCsv(t) {
   return rows;
 }
 
-const [, , inp, out] = process.argv;
+const [, , inp, out, titleArg] = process.argv;
+if (!inp || !out) {
+  console.error("usage: node scripts/csv-to-guide.mjs <in.csv> <out.json> [title]");
+  process.exit(1);
+}
+const title = titleArg ?? out.replace(/^.*[\/]/, "").replace(/\.json$/i, "");
 let act = null;
 const steps = [];
 for (const r of parseCsv(readFileSync(inp, "utf-8"))) {
@@ -29,5 +35,5 @@ for (const r of parseCsv(readFileSync(inp, "utf-8"))) {
   if (tips) step.tips = tips;
   steps.push(step);
 }
-writeFileSync(out, JSON.stringify({ title: "3.29 靈體投擲轉充能打擊 章節拓荒", steps }, null, 2));
+writeFileSync(out, JSON.stringify({ title, steps }, null, 2));
 console.log(`${steps.length} steps`);

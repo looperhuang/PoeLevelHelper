@@ -20,17 +20,52 @@
 
 預設日誌路徑：`C:\Program Files (x86)\Grinding Gear Games\Path of Exile\logs\Client.txt`。設定存在 `%APPDATA%\com.poelevelhelper.overlay\settings.json`。
 
-## 攻略 JSON 格式
+## 匯入攻略
+
+本 repo **不附攻略檔**（攻略內容屬原作者）。攻略是一個 JSON 檔，放在哪裡都可以。
+
+### 載入
+1. 啟動疊層，按 `Ctrl+Alt+O`，選擇攻略 `.json` 檔（上限 5 MB）。
+2. 載入成功會顯示第一步；之後啟動會自動載入同一份。
+3. 格式錯誤時疊層會顯示原因（例如 `steps[3].text 缺少或不是字串`），並保留原本的攻略。
+4. 要換攻略，再按一次 `Ctrl+Alt+O` 即可。
+
+### 格式
 ```json
-{ "title": "攻略名稱",
-  "steps": [ { "act": "A1", "text": "要做的事", "tips": "可省略", "zone": "可省略：進入此區域時跳到這一步" } ] }
+{
+  "title": "攻略名稱",
+  "steps": [
+    { "act": "A1", "text": "要做的事", "tips": "可省略", "zone": "可省略" }
+  ]
+}
 ```
-`zone` 必須與日誌中「你已進入：<區域>。」的名稱完全一致。區域只會往後跳（回城或回到較早的區域不會讓進度倒退），要回頭請用 `Ctrl+Alt+←`（`scripts/zone-names.md` 列出你日誌出現過的名稱）。攻略內容屬原作者，**本 repo 不附攻略檔**。若要從同格式的 Google 試算表轉換：
+- `title`、`steps`（不可為空）、每步的 `act` 與 `text` 必填，都是字串。
+- `tips`：顯示在步驟下方的提示。
+- `zone`：進入這個區域時自動跳到這一步。名稱必須和日誌中「你已進入：<區域>。」完全一致（英文客戶端則是 `You have entered <區域>.`）。
+- 只會往**後**跳：回城或回到較早的區域不會讓進度倒退；要回頭請按 `Ctrl+Alt+←`。
+- 沒標 `zone` 的步驟只能用 `Ctrl+Alt+→` 手動前進。建議每個新地圖的第一步都標上。
+- 用記事本存檔沒問題（會自動處理 BOM），編碼請用 UTF-8。
+
+### 查區域名稱
+`scripts/zone-names.md` 是作者日誌中出現過的區域名稱。要用你自己的日誌產生（PowerShell）：
+```powershell
+Select-String -Path "C:\Program Files (x86)\Grinding Gear Games\Path of Exile\logs\Client.txt" -Pattern '你已進入：(.+?)。' -Encoding UTF8 |
+  ForEach-Object { $_.Matches[0].Groups[1].Value } | Sort-Object -Unique
 ```
-curl -L -o scripts/sheet.csv "https://docs.google.com/spreadsheets/d/<id>/export?format=csv&gid=<gid>"
-node scripts/csv-to-guide.mjs scripts/sheet.csv guides/my-guide.json
-```
-轉出後再依 `scripts/zone-names.md` 手動加上 `zone`。
+
+### 從 Google 試算表轉換
+適用與原攻略相同版面的試算表：C 欄章節（`A1`…`A10`，只寫在該章第一列）、D 欄步驟、E 欄提示。
+1. 試算表需開放「知道連結的人可檢視」。從網址取得 `<id>`（`/d/` 後面那段）和分頁的 `<gid>`（`gid=` 後面的數字）。
+2. 下載 CSV 並轉換：
+   ```
+   curl -L -o scripts/sheet.csv "https://docs.google.com/spreadsheets/d/<id>/export?format=csv&gid=<gid>"
+   node scripts/csv-to-guide.mjs scripts/sheet.csv guides/my-guide.json "我的攻略"
+   ```
+   第三個參數是標題，省略時用檔名。
+3. 打開轉出的 JSON，依上面的區域名稱在步驟上加 `zone`。
+4. 按 `Ctrl+Alt+O` 載入。
+
+版面不同的攻略（網頁、PDF 等）沒有轉換工具，需自行整理成上述格式。
 
 ## 開發
 ```
